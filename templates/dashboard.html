@@ -1,0 +1,172 @@
+{% extends "layout.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-4 mb-4">
+        <div class="card text-white bg-primary">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="card-title">Total User</h5>
+                        <h2 class="mb-0">{{ total_users }}</h2>
+                    </div>
+                    <i class="fas fa-users fa-3x"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-4">
+        <div class="card text-white bg-success">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="card-title">User Aktif</h5>
+                        <h2 class="mb-0">{{ active_users }}</h2>
+                    </div>
+                    <i class="fas fa-user-check fa-3x"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-4">
+        <div class="card text-white bg-info">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="card-title">Akses Hari Ini</h5>
+                        <h2 class="mb-0">{{ today_access }}</h2>
+                    </div>
+                    <i class="fas fa-door-open fa-3x"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Log Akses Terbaru</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>User</th>
+                                <!-- <th>Method</th> -->
+                                <th>Status</th>
+                                <!-- <th>Location</th> -->
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in recent_access %}
+                            <tr>
+                                <td>{{ log.access_time.strftime('%H:%M:%S') }}</td>
+                                <td>{{ log.user.name if log.user else 'Unknown' }}</td>
+                                <!-- <td>
+                                    <span class="badge bg-{{ 'info' if log.access_method == 'face' else 'warning' }}">
+                                        {{ log.access_method }}
+                                    </span>
+                                </td> -->
+                                <td>
+                                    <span class="badge bg-{{ 'success' if log.status == 'granted' else 'danger' }}">
+                                        {{ log.status }}
+                                    </span>
+                                </td>
+                                <!-- <td>{{ log.camera_location }}</td> -->
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if pagination and pagination.pages > 1 %}
+                <nav aria-label="Recent access pagination">
+                    <ul class="pagination justify-content-center mt-3">
+                        <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
+                            <a class="page-link" href="{{ url_for('dashboard', page=pagination.prev_num) }}" tabindex="-1">Previous</a>
+                        </li>
+                        {% for p in range(1, pagination.pages + 1) %}
+                        <li class="page-item {{ 'active' if p == pagination.page }}">
+                            <a class="page-link" href="{{ url_for('dashboard', page=p) }}">{{ p }}</a>
+                        </li>
+                        {% endfor %}
+                        <li class="page-item {{ 'disabled' if not pagination.has_next }}">
+                            <a class="page-link" href="{{ url_for('dashboard', page=pagination.next_num) }}">Next</a>
+                        </li>
+                    </ul>
+                </nav>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <!-- <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('add_user') }}" class="btn btn-primary">
+                        <i class="fas fa-user-plus"></i> Add New User
+                    </a>
+                    <button class="btn btn-success" onclick="controlDoor('unlock')">
+                        <i class="fas fa-unlock"></i> Unlock Door
+                    </button>
+                    <button class="btn btn-warning" onclick="controlDoor('lock')">
+                        <i class="fas fa-lock"></i> Lock Door
+                    </button>
+                    <a href="{{ url_for('access_control') }}" class="btn btn-info">
+                        <i class="fas fa-cog"></i> Access Settings
+                    </a>
+                </div>
+                
+                <div class="mt-4">
+                    <h6>System Status</h6>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Face Recognition:</span>
+                        <span class="badge bg-success">Active</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Camera 1:</span>
+                        <span class="badge bg-success">Online</span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span>Door Lock:</span>
+                        <span class="badge bg-success">Connected</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div> -->
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function controlDoor(action) {
+    fetch('/api/door-control', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            action: action,
+            reason: 'Manual control from dashboard'
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        alert(data.message);
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error controlling door');
+    });
+}
+</script>
+{% endblock %}

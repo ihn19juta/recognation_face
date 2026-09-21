@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>ESP32 CAM Stream</title>
+</head>
+
+<body>
+
+<h2>ESP32 Camera Stream</h2>
+
+<img id="stream" width="400">
+
+<script>
+
+let ws = new WebSocket("ws://10.227.47.81/");
+// 10.210.196.81
+ws.binaryType = "arraybuffer";
+
+ws.onmessage = function(event)
+{
+    let blob = new Blob([event.data], {type:"image/jpeg"});
+    let url = URL.createObjectURL(blob);
+
+    document.getElementById("stream").src = url;
+}
+
+</script>
+
+</body>
+</html>

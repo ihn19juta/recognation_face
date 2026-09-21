@@ -1,0 +1,241 @@
+
+
+{% extends "layout.html" %}
+
+{% block title %}Add User{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Add New User</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-4">
+                            <div style="position:relative; width:100%;">
+                                <video id="video" width="100%" height="auto" autoplay 
+                                       style="border-radius: 8px; background-color: #000;"></video>
+                                <canvas id="overlay" width="400" height="300"
+                                        style="position:absolute; top:0; left:0; pointer-events: none;"></canvas>
+                            </div>
+                            
+                            <div class="mt-3 text-center">
+                                <button id="captureBtn" class="btn btn-primary" onclick="captureFace()">
+                                    <i class="fas fa-camera"></i> Capture Face
+                                </button>
+                                <button id="retakeBtn" class="btn btn-secondary" onclick="retakePhoto()" style="display: none;">
+                                    <i class="fas fa-redo"></i> Retake
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div id="previewContainer" style="display: none;">
+                            <h6>Captured Face:</h6>
+                            <img id="previewImage" src="" alt="Preview" 
+                                 class="img-thumbnail" style="max-width: 100%;">
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <form method="POST" enctype="multipart/form-data" id="userForm">
+                            <div class="row">
+                                <div class="col-md-12 mb-3">
+                                    <label for="name" class="form-label">Full Name *</label>
+                                    <input type="text" class="form-control" id="name" name="name" required>
+                                </div>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-12 mb-3">
+                                    <label for="email" class="form-label">Email Address *</label>
+                                    <input type="email" class="form-control" id="email" name="email" required>
+                                </div>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-12 mb-3">
+                                    <label for="role" class="form-label">Role</label>
+                                    <select class="form-select" id="role" name="role" required>
+                                        <option value="user">User</option>
+                                        <option value="admin">Administrator</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-12 mb-3">
+                                    <label for="profile_picture" class="form-label">
+                                        Profile Picture (Optional)
+                                    </label>
+                                    <input type="file" class="form-control" id="profile_picture" 
+                                           name="profile_picture" accept="image/*">
+                                    <small class="text-muted">Or capture face using webcam above</small>
+                                </div>
+                            </div>
+                            
+                            <!-- Hidden input untuk gambar dari webcam -->
+                            <input type="hidden" id="webcam_image" name="webcam_image">
+                            
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle"></i>
+                                <strong>Face Enrollment Instructions:</strong>
+                                <ul class="mb-0 mt-2">
+                                    <li>Use webcam to capture face for face recognition</li>
+                                    <li>Position face in the center box</li>
+                                    <li>Ensure good lighting conditions</li>
+                                    <li>Or upload a clear photo instead</li>
+                                </ul>
+                            </div>
+                            
+                            <div class="d-flex justify-content-between">
+                                <a href="{{ url_for('user_management') }}" class="btn btn-secondary">
+                                    <i class="fas fa-arrow-left"></i> Back
+                                </a>
+                                <button type="submit" class="btn btn-primary" id="submitBtn">
+                                    <i class="fas fa-save"></i> Save User
+                                </button>
+                            </div>
+                        </form>
+                        
+                        <div id="statusMessage" class="mt-3"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<canvas id="captureCanvas" style="display: none;"></canvas>
+
+<script>
+let videoStream = null;
+let capturedImage = null;
+
+// Inisialisasi kamera
+async function initCamera() {
+    try {
+        const video = document.getElementById('video');
+        const constraints = {
+            video: {
+                width: { ideal: 640 },
+                height: { ideal: 480 },
+                facingMode: 'user'
+            }
+        };
+        
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = stream;
+        videoStream = stream;
+        
+        drawOverlay();
+        
+    } catch (error) {
+        console.error('Error accessing camera:', error);
+    }
+}
+
+// Gambar overlay
+function drawOverlay() {
+    const overlay = document.getElementById('overlay');
+    const ctx = overlay.getContext('2d');
+    
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+    
+    const boxWidth = 200;
+    const boxHeight = 250;
+    const x = (overlay.width - boxWidth) / 2;
+    const y = (overlay.height - boxHeight) / 2;
+    
+    ctx.strokeStyle = '#00ff00';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(x, y, boxWidth, boxHeight);
+    
+    ctx.font = '14px Arial';
+    ctx.fillStyle = '#00ff00';
+    ctx.textAlign = 'center';
+    ctx.fillText('Position face in the box', overlay.width / 2, y - 10);
+}
+
+// Capture wajah
+function captureFace() {
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('captureCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    capturedImage = canvas.toDataURL('image/jpeg', 0.8);
+    
+    document.getElementById('previewImage').src = capturedImage;
+    document.getElementById('previewContainer').style.display = 'block';
+    document.getElementById('captureBtn').style.display = 'none';
+    document.getElementById('retakeBtn').style.display = 'inline-block';
+    
+    // Set hidden input
+    document.getElementById('webcam_image').value = capturedImage;
+}
+
+// Retake photo
+function retakePhoto() {
+    capturedImage = null;
+    document.getElementById('previewContainer').style.display = 'none';
+    document.getElementById('captureBtn').style.display = 'inline-block';
+    document.getElementById('retakeBtn').style.display = 'none';
+    document.getElementById('webcam_image').value = '';
+}
+
+// Submit form dengan gambar webcam
+document.getElementById('userForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    if (capturedImage) {
+        // Jika ada gambar dari webcam, kirim via API
+        const formData = new FormData(this);
+        const name = document.getElementById('name').value;
+        const email = document.getElementById('email').value;
+        const role = document.getElementById('role').value;
+        
+        try {
+            const response = await fetch('/api/enroll-face', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    name: name,
+                    email: email,
+                    role: role,
+                    image: capturedImage
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.status === 'success') {
+                window.location.href = '/users';
+            } else {
+                alert('Error: ' + data.message);
+            }
+            
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Network error. Please try again.');
+        }
+    } else {
+        // Jika tidak ada gambar webcam, submit form biasa
+        this.submit();
+    }
+});
+
+// Inisialisasi
+document.addEventListener('DOMContentLoaded', function() {
+    initCamera();
+    setInterval(drawOverlay, 100);
+});
+</script>
+{% endblock %}

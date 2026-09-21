@@ -1,0 +1,412 @@
+{% extends "layout.html" %}
+
+{% block title %}Enroll New Face{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Enroll New Face</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-4">
+                            <div style="position:relative; width:100%;">
+                                <video id="video" width="100%" height="auto" autoplay 
+                                       style="border-radius: 8px; background-color: #000;"></video>
+                                <canvas id="overlay" width="400" height="300"
+                                        style="position:absolute; top:0; left:0; pointer-events: none;"></canvas>
+                            </div>
+                            
+                            <div class="mt-3 text-center">
+                                <button id="captureBtn" class="btn btn-primary" onclick="captureFace()">
+                                    <i class="fas fa-camera"></i> Foto Wajah
+                                </button>
+                                <button id="retakeBtn" class="btn btn-secondary" onclick="retakePhoto()" style="display: none;">
+                                    <i class="fas fa-redo"></i> Retake
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div id="previewContainer" style="display: none;">
+                            <h6>Captured Image:</h6>
+                            <img id="previewImage" src="" alt="Preview" 
+                                 class="img-thumbnail" style="max-width: 100%;">
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <form id="enrollForm">
+                            <div class="mb-3">
+                                <label for="name" class="form-label">Full Name *</label>
+                                <input type="text" class="form-control" id="name" 
+                                       placeholder="Enter full name" required>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="email" class="form-label">Email Address *</label>
+                                <input type="email" class="form-control" id="email" 
+                                       placeholder="Enter email address" required>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="role" class="form-label">Role</label>
+                                <select class="form-select" id="role">
+                                    <option value="user">User</option>
+                                    <option value="admin">Administrator</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="imageFile" class="form-label">Upload Photo</label>
+                                <input class="form-control" type="file" id="imageFile" accept="image/*">
+                                <div class="form-text">Pilih file foto untuk mendaftar tanpa kamera.</div>
+                            </div>
+                            
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle"></i>
+                                <strong>Instructions:</strong>
+                                <ul class="mb-0 mt-2">
+                                    <li>Position your face in the center box or upload a clear selfie</li>
+                                    <li>Ensure good lighting</li>
+                                    <li>Look directly at the camera or use a clear photo</li>
+                                    <li>Remove glasses if possible</li>
+                                </ul>
+                            </div>
+                            
+                            <div class="d-grid gap-2">
+                                <button type="button" class="btn btn-success" 
+                                        onclick="enrollFace()" id="enrollBtn" disabled>
+                                    <i class="fas fa-user-plus"></i> Tambah Data
+                                </button>
+                                <a href="{{ url_for('user_management') }}" class="btn btn-secondary">
+                                    <i class="fas fa-arrow-left"></i> Kembali
+                                </a>
+                            </div>
+                        </form>
+                        
+                        <div id="statusMessage" class="mt-3"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<canvas id="captureCanvas" style="display: none;"></canvas>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let videoStream = null;
+let capturedImage = null;
+let selectedFile = null;
+let isCaptured = false;
+
+// Inisialisasi kamera
+async function initCamera() {
+    try {
+        const video = document.getElementById('video');
+        const constraints = {
+            video: {
+                width: { ideal: 640 },
+                height: { ideal: 480 },
+                facingMode: 'user'
+            }
+        };
+        
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = stream;
+        videoStream = stream;
+        
+        // Draw overlay box
+        drawOverlay();
+        
+    } catch (error) {
+        console.error('Error accessing camera:', error);
+        showStatus('Error accessing camera. Please check permissions.', 'error');
+    }
+}
+
+// Gambar kotak overlay
+function drawOverlay() {
+    const overlay = document.getElementById('overlay');
+    const ctx = overlay.getContext('2d');
+    
+    // Clear canvas
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+    
+    // Gambar kotak tengah
+    const boxWidth = 200;
+    const boxHeight = 250;
+    const x = (overlay.width - boxWidth) / 2;
+    const y = (overlay.height - boxHeight) / 2;
+    
+    // Border kotak
+    ctx.strokeStyle = '#00ff00';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(x, y, boxWidth, boxHeight);
+    
+    // Teks petunjuk
+    ctx.font = '14px Arial';
+    ctx.fillStyle = '#00ff00';
+    ctx.textAlign = 'center';
+    ctx.fillText('Position face in the box', overlay.width / 2, y - 10);
+    
+    // Garis panduan
+    ctx.strokeStyle = 'rgba(0, 255, 0, 0.3)';
+    ctx.lineWidth = 1;
+    
+    // Garis horizontal tengah
+    ctx.beginPath();
+    ctx.moveTo(0, overlay.height / 2);
+    ctx.lineTo(overlay.width, overlay.height / 2);
+    ctx.stroke();
+    
+    // Garis vertikal tengah
+    ctx.beginPath();
+    ctx.moveTo(overlay.width / 2, 0);
+    ctx.lineTo(overlay.width / 2, overlay.height);
+    ctx.stroke();
+}
+
+// Capture gambar dari video
+function captureFace() {
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('captureCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Set canvas size sama dengan video
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    
+    // Capture frame
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    // Dapatkan data URL
+    capturedImage = canvas.toDataURL('image/jpeg', 0.8);
+    selectedFile = null;
+    isCaptured = true;
+    
+    // Tampilkan preview
+    document.getElementById('previewImage').src = capturedImage;
+    document.getElementById('previewContainer').style.display = 'block';
+    
+    // Toggle button
+    document.getElementById('captureBtn').style.display = 'none';
+    document.getElementById('retakeBtn').style.display = 'inline-block';
+    
+    // Enable enroll button
+    document.getElementById('enrollBtn').disabled = false;
+    
+    showStatus('Face captured successfully!', 'success');
+}
+
+// Handle file upload selection
+function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) {
+        return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+        showStatus('Please select a valid image file.', 'error');
+        event.target.value = '';
+        return;
+    }
+
+    selectedFile = file;
+    isCaptured = true;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        capturedImage = e.target.result;
+        document.getElementById('previewImage').src = capturedImage;
+        document.getElementById('previewContainer').style.display = 'block';
+        document.getElementById('captureBtn').style.display = 'none';
+        document.getElementById('retakeBtn').style.display = 'inline-block';
+        validateForm();
+        showStatus('Photo loaded from file. You can now enroll.', 'success');
+    };
+    reader.readAsDataURL(file);
+}
+
+// Retake photo
+function retakePhoto() {
+    capturedImage = null;
+    selectedFile = null;
+    isCaptured = false;
+    document.getElementById('imageFile').value = '';
+    
+    // Sembunyikan preview
+    document.getElementById('previewContainer').style.display = 'none';
+    
+    // Toggle button
+    document.getElementById('captureBtn').style.display = 'inline-block';
+    document.getElementById('retakeBtn').style.display = 'none';
+    
+    // Disable enroll button
+    document.getElementById('enrollBtn').disabled = true;
+    
+    showStatus('Ready to capture new photo', 'info');
+}
+
+// Enroll face ke server
+async function enrollFace() {
+    const name = document.getElementById('name').value;
+    const email = document.getElementById('email').value;
+    const role = document.getElementById('role').value;
+    
+    // Validasi input
+    if (!name || !email) {
+        showStatus('Please fill in name and email', 'error');
+        return;
+    }
+    
+    if (!isCaptured || !capturedImage) {
+        showStatus('Please capture your face or upload an image first', 'error');
+        return;
+    }
+    
+    // Validasi email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+        showStatus('Please enter a valid email address', 'error');
+        return;
+    }
+    
+    // Tampilkan loading
+    const enrollBtn = document.getElementById('enrollBtn');
+    const originalText = enrollBtn.innerHTML;
+    enrollBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+    enrollBtn.disabled = true;
+    
+    try {
+        let body;
+        let fetchOptions;
+
+        if (selectedFile) {
+            body = new FormData();
+            body.append('name', name);
+            body.append('email', email);
+            body.append('role', role);
+            body.append('image', selectedFile);
+            fetchOptions = { method: 'POST', body };
+        } else {
+            body = new FormData();
+            body.append('name', name);
+            body.append('email', email);
+            body.append('role', role);
+            body.append('image', capturedImage);
+            fetchOptions = { method: 'POST', body };
+        }
+
+        const response = await fetch('/api/enroll-face', fetchOptions);
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            showStatus(`Success! User ${data.user_name} enrolled with face recognition.`, 'success');
+            
+            // Reset form
+            document.getElementById('enrollForm').reset();
+            document.getElementById('imageFile').value = '';
+            selectedFile = null;
+            retakePhoto();
+            
+            // Redirect setelah 3 detik
+            setTimeout(() => {
+                window.location.href = '/users';
+            }, 3000);
+            
+        } else {
+            showStatus(`Error: ${data.message}`, 'error');
+            enrollBtn.disabled = false;
+        }
+        
+    } catch (error) {
+        console.error('Error:', error);
+        showStatus('Network error. Please try again.', 'error');
+        enrollBtn.disabled = false;
+    } finally {
+        enrollBtn.innerHTML = originalText;
+    }
+}
+
+// Tampilkan status message
+function showStatus(message, type) {
+    const statusDiv = document.getElementById('statusMessage');
+    statusDiv.innerHTML = `
+        <div class="alert alert-${type} alert-dismissible fade show">
+            ${message}
+            <button type="button" class="btn-close" onclick="this.parentElement.style.display='none'"></button>
+        </div>
+    `;
+}
+
+// Event listener untuk form validation
+document.getElementById('name').addEventListener('input', validateForm);
+document.getElementById('email').addEventListener('input', validateForm);
+document.getElementById('imageFile').addEventListener('change', handleFileSelect);
+
+function validateForm() {
+    const name = document.getElementById('name').value;
+    const email = document.getElementById('email').value;
+    const enrollBtn = document.getElementById('enrollBtn');
+    
+    // Hanya enable jika sudah capture foto
+    enrollBtn.disabled = !(name && email && isCaptured);
+}
+
+// Inisialisasi saat halaman dimuat
+document.addEventListener('DOMContentLoaded', function() {
+    initCamera();
+    
+    // Update overlay secara periodik
+    setInterval(drawOverlay, 100);
+    
+    // Stop camera saat halaman ditutup
+    window.addEventListener('beforeunload', function() {
+        if (videoStream) {
+            videoStream.getTracks().forEach(track => track.stop());
+        }
+    });
+});
+</script>
+
+<style>
+#overlay {
+    width: 100%;
+    height: auto;
+    max-width: 400px;
+}
+
+#video, #overlay {
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+}
+
+.card {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1);
+    border: none;
+}
+
+.alert-info {
+    background-color: #e8f4ff;
+    border-color: #b6d4fe;
+    color: #084298;
+}
+</style>
+{% endblock %}

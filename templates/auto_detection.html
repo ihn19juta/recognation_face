@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto Face Recognition</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin-top: 30px;
+        }
+        
+        .card {
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border: none;
+            margin-bottom: 20px;
+        }
+        
+        .status-box {
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        
+        .status-idle {
+            background-color: #6c757d;
+            color: white;
+        }
+        
+        .status-detecting {
+            background-color: #ffc107;
+            color: black;
+        }
+        
+        .status-granted {
+            background-color: #28a745;
+            color: white;
+            animation: pulse 1s infinite;
+        }
+        
+        .status-denied {
+            background-color: #dc3545;
+            color: white;
+            animation: shake 0.5s;
+        }
+        
+        .video-container {
+            position: relative;
+            width: 100%;
+            padding-top: 56.25%; /* 16:9 Aspect Ratio */
+            margin-bottom: 20px;
+        }
+        
+        .video-container video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 10px;
+            background-color: #000;
+        }
+        
+        .face-box {
+            position: absolute;
+            border: 3px solid transparent;
+            border-radius: 5px;
+            transition: all 0.3s ease;
+        }
+        
+        .face-box.recognized {
+            border-color: #28a745;
+            box-shadow: 0 0 20px rgba(40, 167, 69, 0.5);
+        }
+        
+        .face-box.unknown {
+            border-color: #dc3545;
+            box-shadow: 0 0 20px rgba(220, 53, 69, 0.5);
+        }
+        
+        .face-label {
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+        
+        .access-log {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .log-entry {
+            padding: 10px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .log-entry.granted {
+            border-left: 5px solid #28a745;
+        }
+        
+        .log-entry.denied {
+            border-left: 5px solid #dc3545;
+        }
+        
+        .log-entry.unknown {
+            border-left: 5px solid #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row mb-4">
+            <div class="col">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h3 class="mb-0">🚪 Sistem Pintu Pengenalan Wajah Otomatis</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="statusBox" class="status-box status-idle">
+                            🟡 Menunggu....
+                        </div>
+                        
+                        <div class="video-container">
+                            <video id="video" autoplay playsinline></video>
+                            <div id="faceOverlay"></div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header bg-info text-white">
+                                        <h5 class="mb-0">Status Sistem</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row mb-3">
+                                            <div class="col">
+                                                <strong>Detection Mode:</strong>
+                                                <span id="modeStatus" class="badge bg-success">Auto</span>
+                                            </div>
+                                        </div>
+                                        <div class="row mb-3">
+                                            <div class="col">
+                                                <strong>Registered Faces:</strong>
+                                                <span id="faceCount" class="badge bg-primary">Loading...</span>
+                                            </div>
+                                        </div>
+                                        <div class="row mb-3">
+                                            <div class="col">
+                                                <strong>Detection Interval:</strong>
+                                                <span class="badge bg-secondary">10 seconds</span>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col">
+                                                <strong>Last Detection:</strong>
+                                                <span id="lastDetection" class="badge bg-secondary">Never</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header bg-success text-white">
+                                        <h5 class="mb-0">Pengguna Saat Ini</h5>
+                                    </div>
+                                    <div class="card-body text-center">
+                                        <div id="currentUser">
+                                            <div class="display-6">👤</div>
+                                            <h3 id="userName">Tidak Terdeteksi</h3>
+                                            <div id="userInfo">
+                                                <span id="confidence" class="badge bg-info">N/A</span>
+                                                <span id="accessStatus" class="badge bg-secondary">N/A</span>
+                                            </div>
+                                            <div id="userMessage" class="mt-2"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col">
+                <div class="card">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="mb-0">📝 Log Akses Terbaru</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="accessLog" class="access-log">
+                            <!-- Log entries will be added here -->
+                            <div class="log-entry unknown">
+                                <div class="d-flex justify-content-between">
+                                    <span>System started</span>
+                                    <small id="currentTime"></small>
+                                </div>
+                                <small class="text-muted">Siap untuk deteksi wajah</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mt-3">
+            <div class="col text-center">
+                <button id="startBtn" class="btn btn-success btn-lg me-2">
+                    ▶️ Mulai
+                </button>
+                <button id="stopBtn" class="btn btn-danger btn-lg me-2" disabled>
+                    ⏹️ Berhenti
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let video = document.getElementById('video');
+        let canvas = document.createElement('canvas');
+        let ctx = canvas.getContext('2d');
+        let isRunning = false;
+        let detectionInterval = null;
+        let lastDetectionTime = 0;
+        const DETECTION_DELAY = 10000; // 2 seconds
+        
+        // Status elements
+        let statusBox = document.getElementById('statusBox');
+        let faceCount = document.getElementById('faceCount');
+        let currentTime = document.getElementById('currentTime');
+        let userName = document.getElementById('userName');
+        let confidence = document.getElementById('confidence');
+        let accessStatus = document.getElementById('accessStatus');
+        let userMessage = document.getElementById('userMessage');
+        let lastDetection = document.getElementById('lastDetection');
+        let accessLog = document.getElementById('accessLog');
+        let startBtn = document.getElementById('startBtn');
+        let stopBtn = document.getElementById('stopBtn');
+        let refreshBtn = document.getElementById('refreshBtn');
+        
+        // Update current time
+        function updateTime() {
+            const now = new Date();
+            currentTime.textContent = now.toLocaleTimeString();
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+        
+        // Start webcam
+        async function startWebcam() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false
+        });
+
+        video.srcObject = stream;
+        await video.play();
+
+        return true;
+
+    } catch (err) {
+        console.error("Webcam error:", err);
+
+        let message = "Cannot access webcam.";
+
+        if (err.name === "NotAllowedError") {
+            message = "Permission denied. Allow camera access in browser settings.";
+        } else if (err.name === "NotFoundError") {
+            message = "Camera not found.";
+        } else if (err.name === "NotReadableError") {
+            message = "Camera is being used by another app.";
+        }
+
+        alert(message);
+        updateStatus("error", message);
+        return false;
+    }
+}
+        // Update status
+        function updateStatus(type, message) {
+            statusBox.className = 'status-box';
+            
+            switch(type) {
+                case 'idle':
+                    statusBox.classList.add('status-idle');
+                    break;
+                case 'detecting':
+                    statusBox.classList.add('status-detecting');
+                    break;
+                case 'granted':
+                    statusBox.classList.add('status-granted');
+                    break;
+                case 'denied':
+                    statusBox.classList.add('status-denied');
+                    break;
+                case 'error':
+                    statusBox.classList.add('status-denied');
+                    break;
+            }
+            
+            statusBox.textContent = message;
+        }
+        
+        // Add log entry
+        function addLogEntry(user, status, message) {
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${status}`;
+            
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString();
+            
+            logEntry.innerHTML = `
+                <div class="d-flex justify-content-between">
+                    <span><strong>${user}</strong> - ${status.toUpperCase()}</span>
+                    <small>${timeStr}</small>
+                </div>
+                <small class="text-muted">${message}</small>
+            `;
+            
+            accessLog.prepend(logEntry);
+            
+            // Keep only last 10 entries
+            const entries = accessLog.querySelectorAll('.log-entry');
+            if (entries.length > 10) {
+                entries[entries.length - 1].remove();
+            }
+        }
+        
+        // Capture frame and send to server
+        async function captureAndDetect() {
+            if (!isRunning) return;
+            
+            const currentTime = Date.now();
+            if (currentTime - lastDetectionTime < DETECTION_DELAY) {
+                return;
+            }
+            
+            lastDetectionTime = currentTime;
+            
+            try {
+                // Set canvas size to video size
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                
+                // Draw video frame to canvas
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                // Convert to base64
+                const imageData = canvas.toDataURL('image/jpeg', 0.8);
+                
+                // Send to server
+                updateStatus('detecting', '🔍 Detecting face...');
+                lastDetection.textContent = new Date().toLocaleTimeString();
+                
+                const response = await fetch('/api/auto-detect', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ image: imageData })
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'granted') {
+                    // Access granted
+                    updateStatus('granted', `✅ Access Granted - Welcome ${result.user_name}!`);
+                    userName.textContent = result.user_name;
+                    confidence.textContent = `${(result.confidence * 100).toFixed(1)}%`;
+                    confidence.className = 'badge bg-success';
+                    accessStatus.textContent = 'GRANTED';
+                    accessStatus.className = 'badge bg-success';
+                    userMessage.textContent = result.message;
+                    
+                    addLogEntry(result.user_name, 'granted', 
+                        `Door unlocked - Confidence: ${(result.confidence * 100).toFixed(1)}%`);
+                    
+                    // Show success for 5 seconds
+                    setTimeout(() => {
+                        if (isRunning) {
+                            updateStatus('idle', '🟡 Ready - Waiting for faces...');
+                        }
+                    }, 5000);
+                    
+                } else if (result.status === 'denied') {
+                    // Access denied
+                    updateStatus('denied', `❌ Access Denied - ${result.message}`);
+                    userName.textContent = result.user_name || 'Unknown';
+                    confidence.textContent = 'N/A';
+                    accessStatus.textContent = 'DENIED';
+                    accessStatus.className = 'badge bg-danger';
+                    userMessage.textContent = result.message;
+                    
+                    addLogEntry(result.user_name || 'Unknown', 'denied', result.message);
+                    
+                } else if (result.status === 'unknown') {
+                    // Face not recognized
+                    updateStatus('detecting', '❓ Face not recognized');
+                    userName.textContent = 'Unknown';
+                    confidence.textContent = 'N/A';
+                    accessStatus.textContent = 'UNKNOWN';
+                    accessStatus.className = 'badge bg-warning';
+                    userMessage.textContent = 'Face not in database';
+                    
+                    addLogEntry('Unknown', 'unknown', 'Face not recognized');
+                    
+                } else if (result.status === 'no_face') {
+                    // No face detected
+                    updateStatus('idle', '👁️ No face detected');
+                    userName.textContent = 'Not Detected';
+                    confidence.textContent = 'N/A';
+                    accessStatus.textContent = 'N/A';
+                    accessStatus.className = 'badge bg-secondary';
+                    userMessage.textContent = '';
+                    
+                } else {
+                    // Error
+                    updateStatus('error', `⚠️ Error: ${result.message}`);
+                    console.error('Detection error:', result);
+                }
+                
+            } catch (error) {
+                console.error('Error during detection:', error);
+                updateStatus('error', '⚠️ Detection error');
+            }
+        }
+        
+        // Start auto detection
+        async function startDetection() {
+            if (isRunning) return;
+            
+            const webcamStarted = await startWebcam();
+            if (!webcamStarted) return;
+            
+            isRunning = true;
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            
+            updateStatus('idle', '🟡 Ready - Waiting for faces...');
+            
+            // Start detection loop
+            detectionInterval = setInterval(captureAndDetect, 1000); // Check every second
+        }
+        
+        // Stop detection
+        function stopDetection() {
+            isRunning = false;
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            
+            clearInterval(detectionInterval);
+            
+            updateStatus('idle', '⏸️ Detection stopped');
+            
+            // Stop webcam
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+            }
+        }
+        
+        // Refresh face data
+        async function refreshFaceData() {
+            try {
+                const response = await fetch('/api/refresh-face-data');
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    faceCount.textContent = result.message.split(': ')[1] + ' faces';
+                    addLogEntry('System', 'granted', result.message);
+                }
+            } catch (error) {
+                console.error('Error refreshing face data:', error);
+            }
+        }
+        
+        // Get initial face count
+        async function getFaceCount() {
+            try {
+                const response = await fetch('/api/test-db');
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    faceCount.textContent = result.face_encodings_count + ' faces';
+                }
+            } catch (error) {
+                console.error('Error getting face count:', error);
+            }
+        }
+        
+        // Event listeners
+        startBtn.addEventListener('click', startDetection);
+        stopBtn.addEventListener('click', stopDetection);
+        refreshBtn.addEventListener('click', refreshFaceData);
+        
+        // Initialize
+        getFaceCount();
+        updateTime();
+        
+        // Add initial log
+        addLogEntry('System', 'granted', 'Auto face recognition system started');
+    </script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

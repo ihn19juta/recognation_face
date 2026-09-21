@@ -1,0 +1,253 @@
+{% extends "layout.html" %}
+
+{% block title %}User Management{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>User Management</h2>
+    <div>
+        <a href="{{ url_for('enroll_face_page') }}" class="btn btn-success me-2">
+            <i class="fas fa-camera"></i> Daftarkan Wajah
+        </a>
+    </div>
+</div>
+
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover" id="usersTable">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Profile</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                        <th>Last Access</th>
+                        <th>Face Registered</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>{{ user.id }}</td>
+                        <td>
+                            {% if user.profile_picture %}
+                            <img src="{{ url_for('static', filename='uploads/' + user.profile_picture) }}" 
+                                 class="rounded-circle" width="40" height="40" alt="Profile">
+                            {% else %}
+                            <div class="bg-secondary rounded-circle d-inline-flex align-items-center justify-content-center" 
+                                 style="width: 40px; height: 40px;">
+                                <i class="fas fa-user text-white"></i>
+                            </div>
+                            {% endif %}
+                        </td>
+                        <td>{{ user.name }}</td>
+                        <td>{{ user.email }}</td>
+                        <td>
+                            <span class="badge bg-{{ 'danger' if user.role == 'admin' else 'info' }}">
+                                {{ user.role }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge bg-{{ 'success' if user.status == 'active' else 'secondary' }}">
+                                {{ user.status }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if user.last_access %}
+                            {{ user.last_access.strftime('%Y-%m-%d %H:%M') }}
+                            {% else %}
+                            Never
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if user.face_encoding %}
+                            <span class="badge bg-success">Yes</span>
+                            {% else %}
+                            <span class="badge bg-warning">No</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group" role="group">
+                                <a href="{{ url_for('edit_user', user_id=user.id) }}" 
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <button class="btn btn-sm btn-outline-danger" 
+                                        onclick="deleteUser({{ user.id }}, '{{ user.name }}')">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                <!-- {% if not user.face_encoding %}
+                                <button class="btn btn-sm btn-outline-info"
+                                        onclick="registerFace({{ user.id }})">
+                                    <i class="fas fa-camera"></i>
+                                </button>
+                                {% endif %} -->
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Face Registration Modal -->
+<div class="modal fade" id="faceRegistrationModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Register Face</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="cameraContainer">
+                    <video id="cameraPreview" width="100%" autoplay></video>
+                </div>
+                <div class="text-center mt-3">
+                    <button id="captureBtn" class="btn btn-primary">
+                        <i class="fas fa-camera"></i> Capture
+                    </button>
+                    <button id="retakeBtn" class="btn btn-secondary" style="display: none;">
+                        <i class="fas fa-redo"></i> Retake
+                    </button>
+                </div>
+                <canvas id="photoCanvas" style="display: none;"></canvas>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button id="registerBtn" class="btn btn-primary" disabled>Register Face</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    $('#usersTable').DataTable();
+});
+
+let currentUserId = null;
+let stream = null;
+let photoData = null;
+
+function deleteUser(userId, userName) {
+    if (confirm(`Are you sure you want to delete user "${userName}"?`)) {
+        window.location.href = `/users/delete/${userId}`;
+    }
+}
+
+function registerFace(userId) {
+    currentUserId = userId;
+    $('#faceRegistrationModal').modal('show');
+    startCamera();
+}
+
+function startCamera() {
+    const video = document.getElementById('cameraPreview');
+    
+    navigator.mediaDevices.getUserMedia({ 
+        video: { 
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            facingMode: 'user' 
+        } 
+    })
+    .then(s => {
+        stream = s;
+        video.srcObject = s;
+    })
+    .catch(err => {
+        console.error("Camera error: ", err);
+        alert("Cannot access camera. Please check permissions.");
+    });
+}
+
+document.getElementById('captureBtn').addEventListener('click', function() {
+    const video = document.getElementById('cameraPreview');
+    const canvas = document.getElementById('photoCanvas');
+    const context = canvas.getContext('2d');
+    
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    // Stop camera stream
+    stream.getTracks().forEach(track => track.stop());
+    
+    photoData = canvas.toDataURL('image/jpeg');
+    
+    // Show preview and options
+    video.style.display = 'none';
+    canvas.style.display = 'block';
+    $('#captureBtn').hide();
+    $('#retakeBtn').show();
+    $('#registerBtn').prop('disabled', false);
+});
+
+document.getElementById('retakeBtn').addEventListener('click', function() {
+    const video = document.getElementById('cameraPreview');
+    const canvas = document.getElementById('photoCanvas');
+    
+    canvas.style.display = 'none';
+    video.style.display = 'block';
+    $('#retakeBtn').hide();
+    $('#captureBtn').show();
+    $('#registerBtn').prop('disabled', true);
+    
+    startCamera();
+});
+
+document.getElementById('registerBtn').addEventListener('click', function() {
+    const formData = new FormData();
+    const blob = dataURLtoBlob(photoData);
+    formData.append('image', blob, 'face.jpg');
+    
+    fetch(`/api/register-face/${currentUserId}`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            alert('Face registered successfully!');
+            $('#faceRegistrationModal').modal('hide');
+            location.reload();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error registering face');
+    });
+});
+
+$('#faceRegistrationModal').on('hidden.bs.modal', function() {
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+    }
+    photoData = null;
+    currentUserId = null;
+});
+
+function dataURLtoBlob(dataURL) {
+    const arr = dataURL.split(',');
+    const mime = arr[0].match(/:(.*?);/)[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], { type: mime });
+}
+</script>
+{% endblock %}
